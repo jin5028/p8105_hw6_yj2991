@@ -68,3 +68,46 @@ city_results |>
 ```
 
 The plot shows the adjusted odds ratio of a solved homicide for male vs. female victims in each city . Most cities have an estimated OR below 1, so cases with male victims are less likely to be solved than those with female victims. In roughly the lower half of the plot, the confidence intervals lie entirely below 1, indicating a clear difference. In the upper part, the intervals cross 1, so the data are consistent with no difference. Only Albuquerque, Stockton, and Fresno have point estimates above 1, and their wide intervals include 1. Wide intervals reflect cities with few homicides, so those estimates are imprecise.
+
+```{r}
+library(tidyverse)
+library(modelr)
+library(broom)
+library(p8105.datasets)
+
+data("weather_df")
+
+set.seed(1)
+
+boot_df <- weather_df |>
+  drop_na(tmax, tmin, prcp) |>
+  bootstrap(n = 5000) |>
+  mutate(
+    models = map(strap, \(s) lm(tmax ~ tmin + prcp, data = s)),
+    r2     = map_dbl(models, \(m) glance(m)$r.squared),
+    beta1  = map_dbl(models, \(m) coef(m)[["tmin"]]),
+    beta2  = map_dbl(models, \(m) coef(m)[["prcp"]]),
+    ratio  = beta1 / beta2
+  )
+
+# ---- Distributions ----
+boot_df |>
+  ggplot(aes(x = r2)) +
+  geom_histogram(bins = 40) +
+  labs(title = "Bootstrap distribution of r-squared", x = "r-squared")
+
+boot_df |>
+  ggplot(aes(x = ratio)) +
+  geom_histogram(bins = 60) +
+  labs(title = "Bootstrap distribution of beta1 / beta2", x = "beta1 / beta2")
+
+# ---- 95% bootstrap percentile CIs ----
+boot_df |>
+  summarize(
+    r2_lower    = quantile(r2, 0.025),
+    r2_upper    = quantile(r2, 0.975),
+    ratio_lower = quantile(ratio, 0.025),
+    ratio_upper = quantile(ratio, 0.975)
+  )
+```
+
