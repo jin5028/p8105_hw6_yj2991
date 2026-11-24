@@ -1,0 +1,70 @@
+---
+title: "HW6"
+author: "Yiran Jin"
+date: "2026-11-24"
+output: html_document
+---
+
+# Problem 1
+```{r}
+library(tidyverse)
+library(broom)
+
+homicide_raw <- read_csv(
+  "https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv"
+)
+
+homicide_df <- homicide_raw |>
+  mutate(
+    city_state  = str_c(city, ", ", state),
+    solved      = as.integer(disposition == "Closed by arrest"),   # 1 = solved, 0 = not
+    victim_race = str_to_lower(victim_race),
+    victim_age  = as.numeric(victim_age)                           # "Unknown" -> NA (warning is expected)
+  ) |>
+  filter(
+    !city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL"),
+    victim_race %in% c("white", "black"),
+    victim_sex  %in% c("Male", "Female")        # drop "Unknown" sex so male vs female is well defined
+  ) |>
+  mutate(
+    victim_race = factor(victim_race, levels = c("white", "black")),   # white = reference
+    victim_sex  = factor(victim_sex,  levels = c("Female", "Male"))    # female = reference
+  )
+
+baltimore_df <- homicide_df |> filter(city_state == "Baltimore, MD")
+
+baltimore_fit <- glm(
+  solved ~ victim_age + victim_sex + victim_race,
+  data = baltimore_df, family = binomial()
+)
+
+baltimore_fit |>
+  tidy(conf.int = TRUE, exponentiate = TRUE) |>
+  filter(term == "victim_sexMale") |>
+  select(term, OR = estimate, conf.low, conf.high, p.value)
+
+city_results <- homicide_df |>
+  nest(data = -city_state) |>
+  mutate(
+    # possibly() keeps the pipeline running if a city's model cannot be fit
+    fit  = map(data, possibly(
+      \(d) glm(solved ~ victim_age + victim_sex + victim_race, data = d, family = binomial()),
+      otherwise = NULL)),
+    tidy = map(fit, \(m) if (is.null(m)) NULL else tidy(m, conf.int = TRUE, exponentiate = TRUE))
+  ) |>
+  select(city_state, tidy) |>
+  unnest(tidy) |>
+  filter(term == "victim_sexMale") |>
+  select(city_state, OR = estimate, conf.low, conf.high)
+
+city_results |>
+  mutate(city_state = fct_reorder(city_state, OR)) |>
+  ggplot(aes(x = OR, y = city_state)) +
+  geom_pointrange(aes(xmin = conf.low, xmax = conf.high)) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(
+    title = "Adjusted OR of a solved homicide: male vs. female victims",
+    x = "Adjusted odds ratio (95% CI)", y = NULL
+  )
+```
+
