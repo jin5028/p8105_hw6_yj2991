@@ -46,7 +46,6 @@ baltimore_fit |>
 city_results <- homicide_df |>
   nest(data = -city_state) |>
   mutate(
-    # possibly() keeps the pipeline running if a city's model cannot be fit
     fit  = map(data, possibly(
       \(d) glm(solved ~ victim_age + victim_sex + victim_race, data = d, family = binomial()),
       otherwise = NULL)),
@@ -68,3 +67,4 @@ city_results |>
   )
 ```
 
+The plot shows the adjusted odds ratio of a solved homicide for male vs. female victims in each city . Most cities have an estimated OR below 1, so cases with male victims are less likely to be solved than those with female victims. In roughly the lower half of the plot, the confidence intervals lie entirely below 1, indicating a clear difference. In the upper part, the intervals cross 1, so the data are consistent with no difference. Only Albuquerque, Stockton, and Fresno have point estimates above 1, and their wide intervals include 1. Wide intervals reflect cities with few homicides, so those estimates are imprecise.
